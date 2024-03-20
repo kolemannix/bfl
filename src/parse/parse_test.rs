@@ -1,11 +1,9 @@
 use crate::parse::*;
-use std::ops::Deref;
 
 #[cfg(test)]
 fn set_up(input: &str) -> Parser<'static> {
     let mut lexer = Lexer::make(input);
     let token_vec: &'static mut [Token] = lexer.run().unwrap().leak();
-    println!("{:?}", token_vec);
     print_tokens(input, token_vec);
     let parser = Parser::make(token_vec, input.to_string(), ".".to_string(), input.to_string());
     parser
@@ -36,7 +34,7 @@ fn basic_fn() -> Result<(), ParseError> {
 fn string_literal() -> ParseResult<()> {
     let mut parser = set_up(r#""hello world""#);
     let result = parser.expect_expression()?;
-    let Expression::Literal(Literal::String(s, span)) = result else { panic!() };
+    let ExpressionValue::Literal(Literal::String(s, span)) = result.expr else { panic!() };
     assert_eq!(&s, "hello world");
     assert_eq!(span.start, 1);
     assert_eq!(span.end, 12);
@@ -47,19 +45,23 @@ fn string_literal() -> ParseResult<()> {
 fn infix() -> Result<(), ParseError> {
     let mut parser = set_up("val x = a + b * doStuff(1, 2)");
     let result = parser.parse_statement()?;
-    if let Some(BlockStmt::ValDef(ValDef { value: Expression::BinaryOp(op), .. })) = &result {
+    if let Some(BlockStmt::ValDef(ValDef {
+        value: Expression { expr: ExpressionValue::BinaryOp(op), .. },
+        ..
+    })) = &result
+    {
         assert_eq!(op.op_kind, BinaryOpKind::Add);
-        assert!(matches!(*op.lhs, Expression::Variable(_)));
-        if let Expression::BinaryOp(BinaryOp {
+        assert!(matches!(op.lhs.expr, ExpressionValue::Variable(_)));
+        if let ExpressionValue::BinaryOp(BinaryOp {
             op_kind: operation,
             lhs: operand1,
             rhs: operand2,
             ..
-        }) = &*op.rhs
+        }) = &op.rhs.expr
         {
             assert_eq!(*operation, BinaryOpKind::Multiply);
-            assert!(matches!(**operand1, Expression::Variable(_)));
-            assert!(matches!(**operand2, Expression::FnCall(_)));
+            assert!(matches!(operand1.expr, ExpressionValue::Variable(_)));
+            assert!(matches!(operand2.expr, ExpressionValue::FnCall(_)));
         } else {
             panic!("Expected nested infix ops; got {:?}", result);
         }
@@ -73,7 +75,7 @@ fn infix() -> Result<(), ParseError> {
 fn record() -> Result<(), ParseError> {
     let mut parser = set_up("{ a: 4, b: x[42], c: true }");
     let result = parser.parse_expression()?.unwrap();
-    assert!(matches!(result, Expression::Record(_)));
+    assert!(matches!(result.expr, ExpressionValue::Record(_)));
     Ok(())
 }
 
@@ -81,23 +83,23 @@ fn record() -> Result<(), ParseError> {
 fn parse_eof() -> Result<(), ParseError> {
     let mut parser = set_up("");
     let result = parser.parse_expression()?;
-    assert!(matches!(result, None));
+    assert!(result.is_none());
     Ok(())
 }
 
 #[test]
-fn fn_args_literal() -> Result<(), String> {
+fn fn_args_literal() -> Result<(), ParseError> {
     let input = "f(myarg = 42,42,\"abc\")";
     let mut parser = set_up(input);
-    let result = parser.parse_expression();
-    if let Ok(Some(Expression::FnCall(fn_call))) = result {
+    let result = parser.parse_expression()?.unwrap();
+    if let ExpressionValue::FnCall(fn_call) = result.expr {
         let args = &fn_call.args;
         let idents = parser.identifiers.clone();
         assert_eq!(idents.borrow().get_name(fn_call.name), "f");
         assert_eq!(idents.borrow().get_name(args[0].name.unwrap()), "myarg");
-        assert!(Expression::is_literal(&args[0].value));
-        assert!(Expression::is_literal(&args[1].value));
-        assert!(Expression::is_literal(&args[2].value));
+        assert!(ExpressionValue::is_literal(&args[0].value.expr));
+        assert!(ExpressionValue::is_literal(&args[1].value.expr));
+        assert!(ExpressionValue::is_literal(&args[2].value.expr));
         assert_eq!(args.len(), 3);
     } else {
         panic!("fail");
@@ -120,11 +122,11 @@ fn dot_accessor() -> ParseResult<()> {
     let input = "a.b.c";
     let mut parser = set_up(input);
     let result = parser.parse_expression()?.unwrap();
-    let Expression::FieldAccess(acc) = result else { panic!() };
+    let ExpressionValue::FieldAccess(acc) = result.expr else { panic!() };
     assert_eq!(acc.target.0.to_usize(), 2);
-    let Expression::FieldAccess(acc2) = *acc.base else { panic!() };
+    let ExpressionValue::FieldAccess(acc2) = acc.base.expr else { panic!() };
     assert_eq!(acc2.target.0.to_usize(), 1);
-    let Expression::Variable(v) = *acc2.base else { panic!() };
+    let ExpressionValue::Variable(v) = acc2.base.expr else { panic!() };
     assert_eq!(v.name.0.to_usize(), 0);
     Ok(())
 }
@@ -176,9 +178,9 @@ fn precedence() -> Result<(), ParseError> {
     let mut parser = set_up(input);
     let result = parser.parse_expression()?.unwrap();
     println!("{result}");
-    let Expression::BinaryOp(bin_op) = result else { panic!() };
-    let Expression::BinaryOp(lhs) = bin_op.lhs.as_ref() else { panic!() };
-    let Expression::Literal(rhs) = bin_op.rhs.as_ref() else { panic!() };
+    let ExpressionValue::BinaryOp(bin_op) = result.expr else { panic!() };
+    let ExpressionValue::BinaryOp(lhs) = bin_op.lhs.expr else { panic!() };
+    let ExpressionValue::Literal(rhs) = bin_op.rhs.expr else { panic!() };
     assert_eq!(bin_op.op_kind, BinaryOpKind::Add);
     assert_eq!(lhs.op_kind, BinaryOpKind::Multiply);
     assert!(matches!(rhs, Literal::Numeric(_, _)));
@@ -191,7 +193,7 @@ fn paren_expression() -> Result<(), ParseError> {
     let mut parser = set_up(input);
     let result = parser.parse_expression()?.unwrap();
     println!("{}", result);
-    if let Expression::BinaryOp(bin_op) = &result {
+    if let ExpressionValue::BinaryOp(bin_op) = result.expr {
         assert_eq!(bin_op.op_kind, BinaryOpKind::Multiply);
         return Ok(());
     }
@@ -225,7 +227,7 @@ fn generic_fn_call() -> Result<(), ParseError> {
     let input = "square<int>(42)";
     let mut parser = set_up(input);
     let result = parser.parse_expression()?.unwrap();
-    assert!(matches!(result, Expression::FnCall(_)));
+    assert!(matches!(result.expr, ExpressionValue::FnCall(_)));
     Ok(())
 }
 
@@ -234,12 +236,12 @@ fn generic_method_call_lhs_expr() -> Result<(), ParseError> {
     let input = "getFn().baz<int>(42)";
     let mut parser = set_up(input);
     let result = parser.parse_expression()?.unwrap();
-    let Expression::MethodCall(call) = result else { panic!() };
-    let Expression::FnCall(fn_call) = call.base.deref() else { panic!() };
+    let ExpressionValue::MethodCall(call) = result.expr else { panic!() };
+    let ExpressionValue::FnCall(fn_call) = call.base.expr else { panic!() };
     assert_eq!(fn_call.name, parser.ident_id("getFn"));
     assert_eq!(call.call.name, parser.ident_id("baz"));
     assert!(call.call.type_args.unwrap()[0].type_expr.is_int());
-    assert!(matches!(call.call.args[0].value, Expression::Literal(_)));
+    assert!(matches!(call.call.args[0].value.expr, ExpressionValue::Literal(_)));
     Ok(())
 }
 
@@ -257,8 +259,8 @@ fn char_value() -> ParseResult<()> {
     let input = "'x'";
     let mut parser = set_up(input);
     let result = parser.expect_expression()?;
-    let x_byte = 'x' as u8;
-    assert!(matches!(result, Expression::Literal(Literal::Char(b, _)) if b == x_byte));
+    let x_byte = b'x';
+    assert!(matches!(result.expr, ExpressionValue::Literal(Literal::Char(b, _)) if b == x_byte));
     Ok(())
 }
 
@@ -267,7 +269,7 @@ fn namespaced_fncall() -> ParseResult<()> {
     let input = "foo::bar::baz()";
     let mut parser = set_up(input);
     let result = parser.expect_expression()?;
-    let Expression::FnCall(fn_call) = result else {
+    let ExpressionValue::FnCall(fn_call) = result.expr else {
         dbg!(result);
         panic!("not fncall")
     };
@@ -282,12 +284,36 @@ fn namespaced_val() -> ParseResult<()> {
     let input = "foo::bar::baz";
     let mut parser = set_up(input);
     let result = parser.expect_expression()?;
-    let Expression::Variable(variable) = result else {
+    let ExpressionValue::Variable(variable) = result.expr else {
         dbg!(result);
         panic!("not variable")
     };
     assert_eq!(variable.namespaces[0], parser.ident_id("foo"));
     assert_eq!(variable.namespaces[1], parser.ident_id("bar"));
     assert_eq!(variable.name, parser.ident_id("baz"));
+    Ok(())
+}
+
+#[test]
+fn type_hint() -> ParseResult<()> {
+    let input = "None: int?";
+    let mut parser = set_up(input);
+    let result = parser.expect_expression()?;
+    let type_hint = result.type_hint.unwrap();
+    let ParsedTypeExpression::Optional(ParsedOptional { base, .. }) = type_hint else { panic!() };
+    let ParsedTypeExpression::Int(_) = *base else {
+        panic!();
+    };
+    Ok(())
+}
+
+#[test]
+fn type_hint_binop() -> ParseResult<()> {
+    let input = "(3!: int + 4: Array<bool>): int";
+    let mut parser = set_up(input);
+    let result = parser.expect_expression()?;
+    let type_hint = &result.type_hint.as_ref().unwrap();
+    eprintln!("{}", result);
+
     Ok(())
 }

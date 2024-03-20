@@ -210,7 +210,36 @@ pub struct OptionalGet {
 }
 
 #[derive(Debug, Clone)]
-pub enum Expression {
+pub struct Expression {
+    pub expr: ExpressionValue,
+    pub type_hint: Option<ParsedTypeExpression>,
+}
+
+impl Expression {
+    pub fn get_span(&self) -> Span {
+        self.expr.get_span()
+    }
+}
+
+impl Display for Expression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.expr.fmt(f)?;
+        if let Some(hint) = &self.type_hint {
+            f.write_str(": ")?;
+            hint.fmt(f)?;
+        }
+        Ok(())
+    }
+}
+
+impl From<ExpressionValue> for Expression {
+    fn from(value: ExpressionValue) -> Self {
+        Expression { expr: value, type_hint: None }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ExpressionValue {
     BinaryOp(BinaryOp),             // a == b
     UnaryOp(UnaryOp),               // !b, *b
     Literal(Literal),               // 42, "asdf"
@@ -227,72 +256,75 @@ pub enum Expression {
     For(ForExpr),                   // for i in [1,2,3] do println(i)
 }
 
-impl Expression {
-    pub fn is_literal(e: &Expression) -> bool {
-        matches!(e, Expression::Literal(_))
+impl ExpressionValue {
+    pub fn is_literal(e: &ExpressionValue) -> bool {
+        matches!(e, ExpressionValue::Literal(_))
     }
     #[inline]
     pub fn get_span(&self) -> Span {
         match self {
-            Expression::BinaryOp(op) => op.span,
-            Expression::UnaryOp(op) => op.span,
-            Expression::Literal(lit) => lit.get_span(),
-            Expression::FnCall(call) => call.span,
-            Expression::Variable(var) => var.span,
-            Expression::FieldAccess(acc) => acc.span,
-            Expression::MethodCall(call) => call.span,
-            Expression::Block(block) => block.span,
-            Expression::If(if_expr) => if_expr.span,
-            Expression::Record(record) => record.span,
-            Expression::IndexOperation(op) => op.span,
-            Expression::Array(array_expr) => array_expr.span,
-            Expression::OptionalGet(optional_get) => optional_get.span,
-            Expression::For(for_expr) => for_expr.span,
+            ExpressionValue::BinaryOp(op) => op.span,
+            ExpressionValue::UnaryOp(op) => op.span,
+            ExpressionValue::Literal(lit) => lit.get_span(),
+            ExpressionValue::FnCall(call) => call.span,
+            ExpressionValue::Variable(var) => var.span,
+            ExpressionValue::FieldAccess(acc) => acc.span,
+            ExpressionValue::MethodCall(call) => call.span,
+            ExpressionValue::Block(block) => block.span,
+            ExpressionValue::If(if_expr) => if_expr.span,
+            ExpressionValue::Record(record) => record.span,
+            ExpressionValue::IndexOperation(op) => op.span,
+            ExpressionValue::Array(array_expr) => array_expr.span,
+            ExpressionValue::OptionalGet(optional_get) => optional_get.span,
+            ExpressionValue::For(for_expr) => for_expr.span,
         }
     }
 
     pub fn is_assignable(&self) -> bool {
         match self {
-            Expression::Variable(_var) => true,
-            Expression::IndexOperation(_op) => true,
-            Expression::FieldAccess(_acc) => true,
-            Expression::MethodCall(_call) => false,
-            Expression::BinaryOp(_op) => false,
-            Expression::UnaryOp(_op) => false,
-            Expression::Literal(_lit) => false,
-            Expression::FnCall(_call) => false,
-            Expression::Block(_block) => false,
-            Expression::If(_if_expr) => false,
-            Expression::Record(_record) => false,
-            Expression::Array(_array_expr) => false,
-            Expression::OptionalGet(_optional_get) => false,
-            Expression::For(_) => false,
+            ExpressionValue::Variable(_var) => true,
+            ExpressionValue::IndexOperation(_op) => true,
+            ExpressionValue::FieldAccess(_acc) => true,
+            ExpressionValue::MethodCall(_call) => false,
+            ExpressionValue::BinaryOp(_op) => false,
+            ExpressionValue::UnaryOp(_op) => false,
+            ExpressionValue::Literal(_lit) => false,
+            ExpressionValue::FnCall(_call) => false,
+            ExpressionValue::Block(_block) => false,
+            ExpressionValue::If(_if_expr) => false,
+            ExpressionValue::Record(_record) => false,
+            ExpressionValue::Array(_array_expr) => false,
+            ExpressionValue::OptionalGet(_optional_get) => false,
+            ExpressionValue::For(_) => false,
         }
     }
 }
 
-impl Display for Expression {
+impl Display for ExpressionValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expression::BinaryOp(op) => {
+            ExpressionValue::BinaryOp(op) => {
                 f.write_fmt(format_args!("({} {} {})", op.lhs, op.op_kind, op.rhs))
             }
-            Expression::UnaryOp(op) => {
+            ExpressionValue::UnaryOp(op) => {
                 let _ = op.op_kind.fmt(f);
                 op.expr.fmt(f)
             }
-            Expression::Literal(lit) => lit.fmt(f),
-            Expression::FnCall(call) => std::fmt::Debug::fmt(call, f),
-            Expression::Variable(var) => var.fmt(f),
-            Expression::FieldAccess(acc) => std::fmt::Debug::fmt(acc, f),
-            Expression::MethodCall(call) => std::fmt::Debug::fmt(call, f),
-            Expression::Block(block) => std::fmt::Debug::fmt(block, f),
-            Expression::If(if_expr) => std::fmt::Debug::fmt(if_expr, f),
-            Expression::Record(record) => std::fmt::Debug::fmt(record, f),
-            Expression::IndexOperation(op) => op.fmt(f),
-            Expression::Array(array_expr) => std::fmt::Debug::fmt(array_expr, f),
-            Expression::OptionalGet(optional_get) => std::fmt::Debug::fmt(optional_get, f),
-            Expression::For(for_expr) => std::fmt::Debug::fmt(for_expr, f),
+            ExpressionValue::Literal(lit) => lit.fmt(f),
+            ExpressionValue::FnCall(call) => std::fmt::Debug::fmt(call, f),
+            ExpressionValue::Variable(var) => var.fmt(f),
+            ExpressionValue::FieldAccess(acc) => std::fmt::Debug::fmt(acc, f),
+            ExpressionValue::MethodCall(call) => std::fmt::Debug::fmt(call, f),
+            ExpressionValue::Block(block) => std::fmt::Debug::fmt(block, f),
+            ExpressionValue::If(if_expr) => std::fmt::Debug::fmt(if_expr, f),
+            ExpressionValue::Record(record) => std::fmt::Debug::fmt(record, f),
+            ExpressionValue::IndexOperation(op) => op.fmt(f),
+            ExpressionValue::Array(array_expr) => std::fmt::Debug::fmt(array_expr, f),
+            ExpressionValue::OptionalGet(optional_get) => {
+                optional_get.base.fmt(f)?;
+                f.write_str("!")
+            }
+            ExpressionValue::For(for_expr) => std::fmt::Debug::fmt(for_expr, f),
         }
     }
 }
@@ -413,6 +445,46 @@ pub enum ParsedTypeExpression {
     TypeApplication(TypeApplication),
     Optional(ParsedOptional),
     Reference(ParsedReference),
+}
+
+impl Display for ParsedTypeExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParsedTypeExpression::Unit(_) => f.write_str("unit"),
+            ParsedTypeExpression::Char(_) => f.write_str("char"),
+            ParsedTypeExpression::Int(_) => f.write_str("int"),
+            ParsedTypeExpression::Bool(_) => f.write_str("bool"),
+            ParsedTypeExpression::String(_) => f.write_str("string"),
+            ParsedTypeExpression::Record(record_type) => {
+                f.write_str("{ ")?;
+                for field in record_type.fields.iter() {
+                    field.name.fmt(f)?;
+                    f.write_str(": ")?;
+                    field.ty.fmt(f)?;
+                    f.write_str(", ")?;
+                }
+                f.write_str(" }")
+            }
+            ParsedTypeExpression::Name(ident, _) => ident.fmt(f),
+            ParsedTypeExpression::TypeApplication(tapp) => {
+                tapp.base.fmt(f)?;
+                f.write_str("<")?;
+                for tparam in tapp.params.iter() {
+                    tparam.fmt(f)?;
+                    f.write_str(", ")?;
+                }
+                f.write_str(">")
+            }
+            ParsedTypeExpression::Optional(opt) => {
+                opt.base.fmt(f)?;
+                f.write_str("?")
+            }
+            ParsedTypeExpression::Reference(refer) => {
+                refer.base.fmt(f)?;
+                f.write_str("*")
+            }
+        }
+    }
 }
 
 impl ParsedTypeExpression {
@@ -935,15 +1007,16 @@ impl<'toks> Parser<'toks> {
 
     fn parse_expression_with_postfix_ops(&mut self) -> ParseResult<Option<Expression>> {
         let Some(mut result) = self.parse_base_expression()? else { return Ok(None) };
-        // Looping for postfix ops inspired by Jakt's parser
-        loop {
+        let with_postfix: Expression = loop {
             let next = self.peek();
             if next.kind.is_postfix_operator() {
                 // Optional uwrap `config!.url`
                 if next.kind == K::Bang {
                     self.tokens.advance();
                     let span = result.get_span().extended(next.span);
-                    result = Expression::OptionalGet(OptionalGet { base: Box::new(result), span });
+                    result =
+                        ExpressionValue::OptionalGet(OptionalGet { base: Box::new(result), span })
+                            .into();
                 } else if next.kind == K::Dot {
                     // Field access syntax; a.b
                     self.tokens.advance();
@@ -962,7 +1035,7 @@ impl<'toks> Parser<'toks> {
                             Parser::expect_fn_arg,
                         )?;
                         let span = result.get_span().extended(args_span);
-                        result = Expression::MethodCall(MethodCall {
+                        result = ExpressionValue::MethodCall(MethodCall {
                             base: Box::new(result),
                             call: Box::new(FnCall {
                                 name: self.intern_ident_token(target),
@@ -972,14 +1045,16 @@ impl<'toks> Parser<'toks> {
                                 span,
                             }),
                             span,
-                        });
+                        })
+                        .into();
                     } else {
                         let span = result.get_span().extended(next.span);
-                        result = Expression::FieldAccess(FieldAccess {
+                        result = ExpressionValue::FieldAccess(FieldAccess {
                             base: Box::new(result),
                             target: self.intern_ident_token(target),
                             span,
-                        });
+                        })
+                        .into();
                     }
                 } else if next.kind == K::OpenBracket {
                     self.tokens.advance();
@@ -990,15 +1065,23 @@ impl<'toks> Parser<'toks> {
                     )?;
                     let close = self.expect_eat_token(K::CloseBracket)?;
                     let span = result.get_span().extended(close.span);
-                    result = Expression::IndexOperation(IndexOperation {
+                    result = ExpressionValue::IndexOperation(IndexOperation {
                         target: Box::new(result),
                         index_expr: Box::new(index_expr),
                         span,
-                    });
+                    })
+                    .into();
                 }
             } else {
-                return Ok(Some(result));
+                break result;
             }
+        };
+        if self.peek().kind == K::Colon {
+            self.tokens.advance();
+            let type_hint = self.expect_type_expression()?;
+            Ok(Some(Expression { expr: with_postfix.expr, type_hint: Some(type_hint) }))
+        } else {
+            Ok(Some(with_postfix))
         }
     }
 
@@ -1051,12 +1134,13 @@ impl<'toks> Parser<'toks> {
                     panic!("expected expr on stack")
                 };
                 let new_span = lhs.get_span().extended(rhs.get_span());
-                let bin_op = Expression::BinaryOp(BinaryOp {
+                let bin_op: Expression = ExpressionValue::BinaryOp(BinaryOp {
                     op_kind,
                     lhs: Box::new(lhs),
                     rhs: Box::new(rhs),
                     span: new_span,
-                });
+                })
+                .into();
                 expr_stack.push(ExprStackMember::Expr(bin_op))
             }
             expr_stack.push(ExprStackMember::Operator(op_kind, tok.span));
@@ -1077,12 +1161,15 @@ impl<'toks> Parser<'toks> {
                 panic!("expected expr")
             };
             let new_span = lhs.get_span().extended(rhs.get_span());
-            expr_stack.push(ExprStackMember::Expr(Expression::BinaryOp(BinaryOp {
-                op_kind,
-                lhs: Box::new(lhs),
-                rhs: Box::new(rhs),
-                span: new_span,
-            })));
+            expr_stack.push(ExprStackMember::Expr(
+                ExpressionValue::BinaryOp(BinaryOp {
+                    op_kind,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                    span: new_span,
+                })
+                .into(),
+            ));
         }
         let final_expr = expr_stack.pop().unwrap().expect_expr();
         Ok(Some(final_expr))
@@ -1115,7 +1202,7 @@ impl<'toks> Parser<'toks> {
         let (first, second, third) = self.tokens.peek_three();
         trace!("parse_expression {} {}", first.kind, second.kind);
         if let Some(lit) = self.parse_literal()? {
-            return Ok(Some(Expression::Literal(lit)));
+            return Ok(Some(ExpressionValue::Literal(lit).into()));
         }
         if first.kind == K::OpenParen {
             self.tokens.advance();
@@ -1151,13 +1238,14 @@ impl<'toks> Parser<'toks> {
             self.tokens.advance();
             let body_expr = self.expect_block()?;
             let span = first.span.extended(body_expr.span);
-            Ok(Some(Expression::For(ForExpr {
+            let for_expr = ExpressionValue::For(ForExpr {
                 iterable_expr: Box::new(iterable_expr),
                 binding,
                 body_block: body_expr,
                 expr_type: for_expr_type,
                 span,
-            })))
+            });
+            Ok(Some(for_expr.into()))
         } else if first.kind.is_prefix_operator() {
             let Some(op_kind) = UnaryOpKind::from_tokenkind(first.kind) else {
                 return Err(Parser::error("unexpected prefix operator", first));
@@ -1165,7 +1253,9 @@ impl<'toks> Parser<'toks> {
             self.tokens.advance();
             let expr = self.expect_expression()?;
             let span = first.span.extended(expr.get_span());
-            Ok(Some(Expression::UnaryOp(UnaryOp { expr: Box::new(expr), op_kind, span })))
+            Ok(Some(
+                ExpressionValue::UnaryOp(UnaryOp { expr: Box::new(expr), op_kind, span }).into(),
+            ))
         } else if first.kind == K::Ident {
             // FnCall
             // Here we use is_whitespace_preceeded to distinguish between:
@@ -1211,21 +1301,27 @@ impl<'toks> Parser<'toks> {
                     K::CloseParen,
                     Parser::expect_fn_arg,
                 )?;
-                Ok(Some(Expression::FnCall(FnCall {
-                    name: self.intern_ident_token(first),
-                    type_args,
-                    args,
-                    namespaces,
-                    span: first.span.extended(args_span),
-                })))
+                Ok(Some(
+                    ExpressionValue::FnCall(FnCall {
+                        name: self.intern_ident_token(first),
+                        type_args,
+                        args,
+                        namespaces,
+                        span: first.span.extended(args_span),
+                    })
+                    .into(),
+                ))
             } else {
                 // The last thing it can be is a simple variable reference expression
                 self.tokens.advance();
-                Ok(Some(Expression::Variable(Variable {
-                    name: self.intern_ident_token(first),
-                    namespaces,
-                    span: first.span,
-                })))
+                Ok(Some(
+                    ExpressionValue::Variable(Variable {
+                        name: self.intern_ident_token(first),
+                        namespaces,
+                        span: first.span,
+                    })
+                    .into(),
+                ))
             }
         } else if first.kind == K::OpenBrace {
             // The syntax {} means empty record, not empty block
@@ -1233,19 +1329,19 @@ impl<'toks> Parser<'toks> {
             trace!("parse_expr {:?} {:?} {:?}", first, second, third);
             if second.kind == K::CloseBrace {
                 let span = first.span.extended(second.span);
-                Ok(Some(Expression::Record(Record { fields: vec![], span })))
+                Ok(Some(ExpressionValue::Record(Record { fields: vec![], span }).into()))
             } else if second.kind == K::Ident && third.kind == K::Colon {
                 let record = Parser::expect("record", first, self.parse_record())?;
-                Ok(Some(Expression::Record(record)))
+                Ok(Some(ExpressionValue::Record(record).into()))
             } else {
                 match self.parse_block()? {
                     None => Err(Parser::error("block", self.peek())),
-                    Some(block) => Ok(Some(Expression::Block(block))),
+                    Some(block) => Ok(Some(ExpressionValue::Block(block).into())),
                 }
             }
         } else if first.kind == K::KeywordIf {
             let if_expr = Parser::expect("If Expression", first, self.parse_if_expr())?;
-            Ok(Some(Expression::If(if_expr)))
+            Ok(Some(ExpressionValue::If(if_expr).into()))
         } else if first.kind == K::OpenBracket {
             // Array
             let start = self.expect_eat_token(K::OpenBracket)?;
@@ -1256,7 +1352,7 @@ impl<'toks> Parser<'toks> {
                 |p| Parser::expect("expression", start, p.parse_expression()),
             )?;
             let span = start.span.extended(span);
-            Ok(Some(Expression::Array(ArrayExpr { elements, span })))
+            Ok(Some(ExpressionValue::Array(ArrayExpr { elements, span }).into()))
         } else {
             // More expression types
             Ok(None)
@@ -1312,10 +1408,10 @@ impl<'toks> Parser<'toks> {
     }
 
     fn parse_assignment(&mut self, lhs: Expression) -> ParseResult<Assignment> {
-        let _valid_lhs = match &lhs {
-            Expression::FieldAccess(_) => true,
-            Expression::Variable(_) => true,
-            Expression::IndexOperation(_) => true,
+        let _valid_lhs = match &lhs.expr {
+            ExpressionValue::FieldAccess(_) => true,
+            ExpressionValue::Variable(_) => true,
+            ExpressionValue::IndexOperation(_) => true,
             _ => false,
         };
         self.expect_eat_token(K::Equals)?;

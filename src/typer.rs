@@ -12,7 +12,7 @@ use log::{debug, error, trace, Level};
 
 use crate::lex::{Span, TokenKind};
 use crate::parse::{
-    self, FnCallArg, ForExpr, ForExprType, IfExpr, IndexOperation, ParsedNamespace,
+    self, ExpressionValue, FnCallArg, ForExpr, ForExprType, IfExpr, IndexOperation, ParsedNamespace,
 };
 use crate::parse::{
     AstId, Block, BlockStmt, Definition, Expression, FnCall, FnDef, IdentifierId, Literal,
@@ -1118,13 +1118,13 @@ impl TypedModule {
     fn eval_const(&mut self, const_expr: &parse::ConstVal) -> TyperResult<VariableId> {
         let scope_id = 0;
         let type_id = self.eval_const_type_expr(&const_expr.ty)?;
-        let expr = match &const_expr.value_expr {
-            Expression::Literal(Literal::Numeric(n, span)) => {
+        let expr = match &const_expr.value_expr.expr {
+            ExpressionValue::Literal(Literal::Numeric(n, span)) => {
                 let num = self.parse_numeric(n).map_err(|msg| make_err(msg, *span))?;
                 TypedExpr::Int(num, const_expr.span)
             }
-            Expression::Literal(Literal::Bool(b, span)) => TypedExpr::Bool(*b, *span),
-            Expression::Literal(Literal::Char(c, span)) => TypedExpr::Char(*c, *span),
+            ExpressionValue::Literal(Literal::Bool(b, span)) => TypedExpr::Bool(*b, *span),
+            ExpressionValue::Literal(Literal::Char(c, span)) => TypedExpr::Char(*c, *span),
             _other => {
                 return make_fail(
                     "Only literals are currently supported as constants",
@@ -1363,10 +1363,12 @@ impl TypedModule {
         scope_id: ScopeId,
         _expected_type: Option<TypeId>,
     ) -> TyperResult<TypedExpr> {
-        match expr {
-            Expression::IndexOperation(index_op) => self.eval_index_operation(index_op, scope_id),
-            Expression::Variable(variable) => self.eval_variable(variable, scope_id, true),
-            Expression::FieldAccess(field_access) => {
+        match &expr.expr {
+            ExpressionValue::IndexOperation(index_op) => {
+                self.eval_index_operation(index_op, scope_id)
+            }
+            ExpressionValue::Variable(variable) => self.eval_variable(variable, scope_id, true),
+            ExpressionValue::FieldAccess(field_access) => {
                 self.eval_field_access(field_access, scope_id, true)
             }
             other => {
@@ -1446,8 +1448,12 @@ impl TypedModule {
         expected_type: Option<TypeId>,
     ) -> TyperResult<TypedExpr> {
         trace!("eval_expr: {}: {:?}", expr, expected_type.map(|t| self.type_id_to_string(t)));
-        match expr {
-            Expression::Array(array_expr) => {
+        let expected_type = match &expr.type_hint {
+            None => expected_type,
+            Some(type_hint_expr) => Some(self.eval_type_expr(type_hint_expr, scope_id)?),
+        };
+        match &expr.expr {
+            ExpressionValue::Array(array_expr) => {
                 let mut element_type: Option<TypeId> = match expected_type {
                     Some(type_id) => match self.get_type(type_id) {
                         Type::Array(arr) => Ok(Some(arr.element_type)),
@@ -1485,8 +1491,10 @@ impl TypedModule {
                 };
                 Ok(TypedExpr::Array(ArrayLiteral { elements, type_id, span: array_expr.span }))
             }
-            Expression::IndexOperation(index_op) => self.eval_index_operation(index_op, scope_id),
-            Expression::Record(ast_record) => {
+            ExpressionValue::IndexOperation(index_op) => {
+                self.eval_index_operation(index_op, scope_id)
+            }
+            ExpressionValue::Record(ast_record) => {
                 // FIXME: Let's factor out Structs and Records into separate things
                 //        records can be created on the fly and are just hashmap literals
                 //        Structs are structs
@@ -1580,8 +1588,8 @@ impl TypedModule {
                 trace!("generated record: {}", self.expr_to_string(&expr));
                 Ok(expr)
             }
-            Expression::If(if_expr) => self.eval_if_expr(if_expr, scope_id, expected_type),
-            Expression::BinaryOp(binary_op) => {
+            ExpressionValue::If(if_expr) => self.eval_if_expr(if_expr, scope_id, expected_type),
+            ExpressionValue::BinaryOp(binary_op) => {
                 // Infer expected type to be type of operand1
                 match binary_op.op_kind {
                     BinaryOpKind::Equals | BinaryOpKind::NotEquals => {
@@ -1623,7 +1631,7 @@ impl TypedModule {
                 });
                 Ok(expr)
             }
-            Expression::UnaryOp(op) => {
+            ExpressionValue::UnaryOp(op) => {
                 let base_expr = self.eval_expr(&op.expr, scope_id, None)?;
                 match op.op_kind {
                     UnaryOpKind::Dereference => {
@@ -1670,8 +1678,8 @@ impl TypedModule {
                     }
                 }
             }
-            Expression::Literal(Literal::Unit(span)) => Ok(TypedExpr::Unit(*span)),
-            Expression::Literal(Literal::None(span)) => {
+            ExpressionValue::Literal(Literal::Unit(span)) => Ok(TypedExpr::Unit(*span)),
+            ExpressionValue::Literal(Literal::None(span)) => {
                 // If we are expecting an Option, I need to reach inside it to get the inner type
                 let expected_type = expected_type.ok_or(make_err(
                     "Cannot infer type of None literal without type hint",
@@ -1688,16 +1696,18 @@ impl TypedModule {
                 let type_id = self.add_type(none_type);
                 Ok(TypedExpr::None(type_id, *span))
             }
-            Expression::Literal(Literal::Char(byte, span)) => Ok(TypedExpr::Char(*byte, *span)),
-            Expression::Literal(Literal::Numeric(s, span)) => {
+            ExpressionValue::Literal(Literal::Char(byte, span)) => {
+                Ok(TypedExpr::Char(*byte, *span))
+            }
+            ExpressionValue::Literal(Literal::Numeric(s, span)) => {
                 let num = self.parse_numeric(s).map_err(|msg| make_err(msg, *span))?;
                 Ok(TypedExpr::Int(num, *span))
             }
-            Expression::Literal(Literal::Bool(b, span)) => {
+            ExpressionValue::Literal(Literal::Bool(b, span)) => {
                 let expr = TypedExpr::Bool(*b, *span);
                 Ok(expr)
             }
-            Expression::Literal(Literal::String(s, span)) => {
+            ExpressionValue::Literal(Literal::String(s, span)) => {
                 // So sad, we could just point to the source. BUT if we ever do escaping and things
                 // then the source string is not the same as the string the user meant; perhaps here
                 // is the place, or maybe in the parser, that we would actually do some work, which
@@ -1706,25 +1716,25 @@ impl TypedModule {
                 let expr = TypedExpr::Str(s.clone(), *span);
                 Ok(expr)
             }
-            Expression::Variable(variable) => self.eval_variable(variable, scope_id, false),
-            Expression::FieldAccess(field_access) => {
+            ExpressionValue::Variable(variable) => self.eval_variable(variable, scope_id, false),
+            ExpressionValue::FieldAccess(field_access) => {
                 self.eval_field_access(field_access, scope_id, false)
             }
-            Expression::Block(block) => {
+            ExpressionValue::Block(block) => {
                 let block = self.eval_block(block, scope_id, expected_type)?;
                 Ok(TypedExpr::Block(block))
             }
-            Expression::MethodCall(m_call) => {
+            ExpressionValue::MethodCall(m_call) => {
                 let base_expr = self.eval_expr(&m_call.base, scope_id, None)?;
                 let call =
                     self.eval_function_call(&m_call.call, Some(base_expr), None, scope_id)?;
                 Ok(call)
             }
-            Expression::FnCall(fn_call) => {
+            ExpressionValue::FnCall(fn_call) => {
                 let call = self.eval_function_call(fn_call, None, None, scope_id)?;
                 Ok(call)
             }
-            Expression::OptionalGet(optional_get) => {
+            ExpressionValue::OptionalGet(optional_get) => {
                 let base = self.eval_expr_inner(&optional_get.base, scope_id, expected_type)?;
                 let Type::Optional(optional_type) = self.get_type(base.get_type()) else {
                     return make_fail(
@@ -1741,7 +1751,7 @@ impl TypedModule {
                     span: optional_get.span,
                 }))
             }
-            Expression::For(for_expr) => self.eval_for_expr(for_expr, scope_id, expected_type),
+            ExpressionValue::For(for_expr) => self.eval_for_expr(for_expr, scope_id, expected_type),
         }
     }
 
@@ -1771,11 +1781,12 @@ impl TypedModule {
     }
 
     fn synth_variable_parsed_expr(&self, variable_id: VariableId, span: Span) -> parse::Expression {
-        Expression::Variable(parse::Variable {
+        ExpressionValue::Variable(parse::Variable {
             name: self.get_variable(variable_id).name,
             namespaces: Vec::new(),
             span,
         })
+        .into()
     }
 
     fn synth_function_call(

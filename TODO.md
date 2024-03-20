@@ -54,6 +54,7 @@
 - [x] Fix namespaces to require full paths (currently busted must be unique names globally)
 - [x] Allow namespaces inside namespaces
 - [ ] Type Ascriptions (literally can just pass expected_type into eval and do an addtl typecheck)
+    - Any expression can be followed by `: <type expr>` to set the type hint / expected type of the expression
 - [ ] Some debug info in LLVM IR (source snippets or line numbers?)
 - [ ] Single-arm match syntax with `is`; `if x is Some(y)` instead of `if let Some(y) = x`; if x is not Err(y) (replaces
   let-else)

@@ -131,8 +131,8 @@ fn main() -> Result<()> {
     println!("{:#?}", args);
 
     static_assert_size!(parse::Definition, 16);
-    static_assert_size!(parse::BlockStmt, 208); // Get down below 100
-    static_assert_size!(parse::Expression, 96); // Get back down
+    static_assert_size!(parse::BlockStmt, 304); // Get down below 100
+    static_assert_size!(parse::Expression, 144); // Get back down
     static_assert_size!(typer::TypedExpr, 56);
     static_assert_size!(typer::TypedStmt, 16);
     println!("bfl Compiler v0.1.0");

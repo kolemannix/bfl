@@ -862,7 +862,7 @@ impl<'ctx> Codegen<'ctx> {
             variable_ptr,
             Some(self.debug.debug_builder.create_auto_variable(
                 self.debug.current_scope(),
-                &*self.get_ident_name(variable.name),
+                &self.get_ident_name(variable.name),
                 self.debug.file,
                 self.module.get_line_number(val.span),
                 self.get_debug_type(val.ty),
