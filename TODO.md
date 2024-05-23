@@ -3,9 +3,10 @@
 # Project Completion Checklist
 
 - [ ] QoL before rest of pattern matching
-  - [ ] Move spans into SoA on AST
+  - [ ] Use ast nodes on Typed\* instead of copies of spans
   - [ ] Use ast nodes on Typed\* instead of copies of spans
   - [ ] Codegen fail instead of panic
+  - [ ] ? Move spans into SoA on AST
 - [ ] Pattern Matching
   - [x] Single-arm match evals to boolean
   - [x] Literals
