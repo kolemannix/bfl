@@ -1,4 +1,4 @@
-type E = enum A(int), B, C
+type E = enum A(int) | B | C
 
 fn main(): int {
 

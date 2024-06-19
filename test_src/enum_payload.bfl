@@ -1,10 +1,9 @@
-type Maybe = enum A, B(char), C(string)
+type Maybe = enum A | B(char) | C(string)
 
 fn main(): int {
   val a: Maybe = .A;
   val b: Maybe = .B('x');
   val c: Maybe = .C("hello, enums");
-  // if a is .A { () } else assert(false);
   if a is .A {
     ()
   } else assert(false);

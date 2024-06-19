@@ -367,9 +367,9 @@ fn tag_literals() -> ParseResult<()> {
 fn when_pattern() -> ParseResult<()> {
     let input = r#"
         when x {
-           { x: 1, y: 2 } -> 1,
-           { x: 2, y: 2 } -> { 2 },
-           _ -> { 3 },
+           | { x: 1, y: 2 } -> 1
+           | { x: 2, y: 2 } -> { 2 }
+           | _ -> { 3 }
         };
 "#;
     let (module, _expr, expr_id) = test_single_expr_with_id(input)?;

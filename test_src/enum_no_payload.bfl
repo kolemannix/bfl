@@ -1,5 +1,5 @@
 fn main(): int {
-  mut v: enum Yes, No = .No;
+  mut v: enum Yes | No = .No;
   if v is .No { () } else { assert(false) };
   v = .Yes;
   if v is .Yes { () } else { assert(false) };

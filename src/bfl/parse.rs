@@ -1532,7 +1532,7 @@ impl<'toks, 'module> Parser<'toks, 'module> {
         loop {
             // Expect comma
             if !first {
-                if self.peek().kind == K::Comma {
+                if self.peek().kind == K::Pipe {
                     self.tokens.advance();
                 } else {
                     break;
@@ -1834,6 +1834,10 @@ impl<'toks, 'module> Parser<'toks, 'module> {
 
             self.expect_eat_token(K::OpenBrace)?;
 
+            // Allow an opening pipe for symmetry
+            if self.peek().kind == K::Pipe {
+                self.tokens.advance();
+            }
             let mut cases = Vec::new();
             while self.peek().kind != K::CloseBrace {
                 let arm_pattern_id = self.expect_pattern()?;
@@ -1844,11 +1848,11 @@ impl<'toks, 'module> Parser<'toks, 'module> {
                 let arm_expr_id = self.expect_expression()?;
                 cases.push(ParsedMatchCase { pattern: arm_pattern_id, expression: arm_expr_id });
                 let next = self.peek();
-                if next.kind == K::Comma {
+                if next.kind == K::Pipe {
                     self.tokens.advance();
                 } else if next.kind != K::CloseBrace {
                     return Err(ParseError {
-                        expected: "comma or close brace".to_string(),
+                        expected: "pipe or close brace".to_string(),
                         token: next,
                         cause: None,
                     });
